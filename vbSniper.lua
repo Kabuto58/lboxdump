@@ -30,6 +30,7 @@ local currentServer, shouldGuidePlayer, midpoint = nil, false, nil
 local wasAlive, alreadyRequested = false, false
 local waitingForSniperClass, isSniperUpgrade, sniperUpgradeCompleted = false, false, false
 local sniperUpgradeCompletedTime = 0  -- Timestamp when Sniper upgrades finished
+local hasResetForEndOfMatch = false
 
 local COOLDOWN_TIME = 0.5
 local UPGRADE_DELAY, SEQUENCE_END_COOLDOWN = 0.1, 1.0
@@ -38,6 +39,7 @@ local TOGGLE_COOLDOWN = 0.2
 local TELEPORTER_AUTOWALK_DELAY = 2.0  -- Delay before enabling teleporter auto-walk
 local KEY_L, KEY_K = 22, 21
 local TF_CLASS_SNIPER = 2
+local TF_CLASS_MEDIC = 5
 
 -- ===== TELEPORTER SCANNER CONFIGURATION =====
 local teleporterConfig = {
@@ -379,6 +381,28 @@ local function HasVaccinator()
     return false
 end
 
+local function ResetState()
+    isProcessing, respawnExpected = false, false
+    upgradeQueue, sequenceEndTime, nextUpgradeTime = {}, 0, 0
+    shouldGuidePlayer, thresholdNotificationShown, hasTriedClassChange = false, false, false
+    needToLeaveZone, leaveZoneStartPos = false, nil
+    lastToggleTime, lastVaccWarning = 0, false
+    waitingForSniperClass, isSniperUpgrade, sniperUpgradeCompleted = false, false, false
+    sniperUpgradeCompletedTime = 0
+    config.autoWalkEnabled = true
+
+    -- Reset time-based variables to prevent cooldown issues when changing servers
+    lastProcessTime, lastCleanupTime = 0, 0
+
+    -- Reset teleporter scanner state
+    hasScannedTeleporter, foundTeleporters = false, {}
+    tpPathSelected, tpCurrentPathIndex = false, nil
+    tpCurrentPathWaypointIndex, tpUsingPredefinedPath = 1, false
+    tpLOSDetectedTime = 0
+    teleporterManuallyDisabled = false
+    teleporterConfig.autoWalkEnabled = false
+end
+
 local function CheckServerChange()
     local netChannel = clientstate.GetNetChannel()
     local serverIP = netChannel and netChannel:GetAddress() or nil
@@ -389,22 +413,8 @@ local function CheckServerChange()
         local oldServer = currentServer
         currentServer = serverIP
 
-        -- Reset all state variables when changing servers
-        isProcessing, respawnExpected = false, false
-        upgradeQueue, sequenceEndTime, nextUpgradeTime = {}, 0, 0
-        shouldGuidePlayer, thresholdNotificationShown, hasTriedClassChange = false, false, false
-        needToLeaveZone, leaveZoneStartPos = false, nil
-        lastToggleTime, lastVaccWarning = 0, false
-        waitingForSniperClass, isSniperUpgrade, sniperUpgradeCompleted = false, false, false
-        sniperUpgradeCompletedTime = 0
-
-        -- Reset teleporter scanner state
-        hasScannedTeleporter, foundTeleporters = false, {}
-        tpPathSelected, tpCurrentPathIndex = false, nil
-        tpCurrentPathWaypointIndex, tpUsingPredefinedPath = 1, false
-        tpLOSDetectedTime = 0
-        teleporterManuallyDisabled = false
-        teleporterConfig.autoWalkEnabled = false
+        ResetState()
+        hasResetForEndOfMatch = false
 
         -- Only show notification if we're fully connected to a new server
         if oldServer and serverIP and signonState == E_SignonState.SIGNONSTATE_FULL then
@@ -573,6 +583,7 @@ local function TriggerProcess()
     end
 
     lastProcessTime, isProcessing = currentTime, true
+    gui.SetValue("mvm auto ready (f4)", 0)
     AddNotification("Starting sequence...", "success")
     
     
@@ -692,6 +703,20 @@ end
 callbacks.Register("CreateMove", function(cmd)
     local currentTime = globals.CurTime()
     CheckServerChange()
+
+    -- Reset state when match ends so script works consistently across games
+    if gamecoordinator.InEndOfMatch() then
+        if not hasResetForEndOfMatch then
+            hasResetForEndOfMatch = true
+            if isProcessing then ForceCleanup() end
+            ResetState()
+            AddNotification("End of match - State reset", "info")
+        end
+        return
+    else
+        hasResetForEndOfMatch = false
+    end
+
     local me = entities.GetLocalPlayer()
 
     if me and thresholdNotificationShown and not hasTriedClassChange then
@@ -844,6 +869,14 @@ callbacks.Register("CreateMove", function(cmd)
         ProcessQueue()
     end
 
+    -- L key: Manual trigger for Medic upgrade sequence (only before Sniper upgrades)
+    if not sniperUpgradeCompleted and IsGameInputAllowed() and input.IsButtonPressed(KEY_L) then
+        local playerClass = me:GetPropInt("m_iClass")
+        if playerClass == TF_CLASS_MEDIC then
+            TriggerProcess()
+        end
+    end
+
     -- ===== TELEPORTER AUTO-WALK (after Sniper upgrades) =====
     if sniperUpgradeCompleted then
         local playerClass = me:GetPropInt("m_iClass")
@@ -867,12 +900,13 @@ callbacks.Register("CreateMove", function(cmd)
         end
 
         -- Emergency stop with L key
-        if input.IsButtonPressed(22) then  -- L key
+        if IsGameInputAllowed() and input.IsButtonPressed(KEY_L) then
             teleporterConfig.autoWalkEnabled = not teleporterConfig.autoWalkEnabled
 
             if teleporterConfig.autoWalkEnabled then
-                -- Re-enabling auto-walk
+                -- Re-enabling auto-walk: rescan teleporters for fresh data
                 teleporterManuallyDisabled = false
+                hasScannedTeleporter = false
                 AddNotification("Auto-walk ENABLED (L key)", "success")
             else
                 -- Disabling auto-walk
@@ -886,6 +920,7 @@ callbacks.Register("CreateMove", function(cmd)
             tpUsingPredefinedPath = false
             tpPathSelected = false
             tpLOSDetectedTime = 0
+            return  -- Skip auto-walk logic this frame to prevent immediate distance check
         end
 
         -- Auto-walk logic
@@ -899,6 +934,7 @@ callbacks.Register("CreateMove", function(cmd)
                 else
                     teleporterConfig.autoWalkEnabled = false
                     sniperUpgradeCompletedTime = 0  -- Reset to prevent delay check from re-enabling
+                    gui.SetValue("mvm auto ready (f4)", 1)
                     AddNotification("Touched teleporter - Auto-walk OFF", "success")
                 end
             end
@@ -940,6 +976,7 @@ callbacks.Register("Draw", function()
                 local height = UI.notificationHeight
 
                 local progress = 1 - (age / UI.notificationLifetime)
+                progress = math.max(0, math.min(1, progress))  -- Clamp progress between 0 and 1
                 local alpha = clampColor(notif.alpha * progress)
 
                 -- Background
@@ -977,64 +1014,109 @@ callbacks.Register("Draw", function()
             ScanForTeleportersTP()
         end
 
-        -- Draw teleporter display
-        local tpStartX = math.floor(screenWidth * 0.02)
-        local tpStartY = 100
-        local tpLineHeight = 18
+        local paddingX, paddingY = 10, 5
+        local tpX = math.floor(screenWidth * 0.02)
+        local tpY = 100
+        local lineH = 18
+        local healthBarH = 4
+        local healthBarSpacing = 6
 
         draw.SetFont(UI.mainFont)
 
-        -- Header
-        draw.Color(255, 255, 255, 255)
-        draw.Text(tpStartX, tpStartY, "=== Teleporter ESP ===")
-        tpStartY = tpStartY + tpLineHeight + 5
+        -- Build text content for measurement
+        local headerText = "Teleporter ESP"
+        local awLabel = "[L] Auto-Walk"
+        local awStatus = teleporterConfig.autoWalkEnabled and " (Active)" or ""
 
-        -- Auto-walk status
-        if teleporterConfig.autoWalkEnabled then
-            draw.Color(100, 255, 100, 255)
-            draw.Text(tpStartX, tpStartY, "[L] AUTO-WALK: ACTIVE")
+        -- Measure max width across all content
+        local maxW = 0
+        maxW = math.max(maxW, draw.GetTextSize(headerText))
+        maxW = math.max(maxW, draw.GetTextSize(awLabel .. awStatus))
+
+        -- Pre-build teleporter entry strings and measure
+        local teleTexts = {}
+        local displayCount = math.min(#foundTeleporters, 2)
+        if #foundTeleporters == 0 then
+            maxW = math.max(maxW, draw.GetTextSize("No teleporter entrances found"))
         else
-            draw.Color(200, 200, 200, 255)
-            draw.Text(tpStartX, tpStartY, "[L] AUTO-WALK: OFF")
+            for i = 1, displayCount do
+                local tele = foundTeleporters[i]
+                local teamStr = tele.isEnemy and "[ENEMY]" or "[TEAM]"
+                local txt = string.format("%s %s - Lvl %d - %.0fm",
+                    teamStr, tele.builderName, tele.level, tele.distance / 52.5)
+                table.insert(teleTexts, txt)
+                maxW = math.max(maxW, draw.GetTextSize(txt))
+            end
+            if #foundTeleporters > 2 then
+                maxW = math.max(maxW, draw.GetTextSize("... and " .. (#foundTeleporters - 2) .. " more"))
+            end
         end
-        tpStartY = tpStartY + tpLineHeight + 5
 
-        -- List teleporters
+        -- Calculate panel dimensions
+        local panelW = maxW + paddingX * 2
+        local panelH = 2 + paddingY + lineH + lineH + paddingY  -- accent + pad + header + autowalk + separator
+        if #foundTeleporters == 0 then
+            panelH = panelH + lineH
+        else
+            panelH = panelH + displayCount * (lineH + healthBarH + healthBarSpacing)
+            if #foundTeleporters > 2 then
+                panelH = panelH + lineH
+            end
+        end
+        panelH = panelH + paddingY  -- bottom padding
+
+        -- bg
+        draw.Color(0, 0, 0, 178)
+        draw.FilledRect(tpX, tpY, tpX + panelW, tpY + panelH)
+
+        -- top bar
+        draw.Color(199, 170, 255, 255)
+        draw.FilledRect(tpX, tpY, tpX + panelW, tpY + 2)
+
+        -- content
+        local cx = tpX + paddingX
+        local cy = tpY + 2 + paddingY
+
+        -- header text
+        draw.Color(UI.colors.text[1], UI.colors.text[2], UI.colors.text[3], 255)
+        draw.Text(cx, cy, headerText)
+        cy = cy + lineH
+
+        -- autowalk text (dim label + colored status)
+        draw.Color(200, 200, 200, 255)
+        draw.Text(cx, cy, awLabel)
+        if teleporterConfig.autoWalkEnabled then
+            local labelW = draw.GetTextSize(awLabel)
+            draw.Color(UI.colors.success[1], UI.colors.success[2], UI.colors.success[3], 255)
+            draw.Text(cx + labelW, cy, awStatus)
+        end
+        cy = cy + lineH + paddingY
+
+        -- teleporter entries
         if #foundTeleporters == 0 then
             draw.Color(200, 200, 200, 255)
-            draw.Text(tpStartX, tpStartY, "No teleporter entrances found")
+            draw.Text(cx, cy, "No teleporter entrances found")
         else
-            for i, tele in ipairs(foundTeleporters) do
+            local barW = panelW - paddingX * 2
+            for i = 1, displayCount do
+                local tele = foundTeleporters[i]
                 local color = tele.isEnemy and UI.colors.enemy or UI.colors.friendly
-                draw.Color(color[1], color[2], color[3], 150)
 
-                local teamStr = tele.isEnemy and "[ENEMY]" or "[TEAM]"
-                local text = string.format("%s %s - Lvl %d - %.0fm",
-                    teamStr, tele.builderName, tele.level, tele.distance / 52.5)
+                draw.Color(color[1], color[2], color[3], 200)
+                draw.Text(cx, cy, teleTexts[i])
+                cy = cy + lineH
 
-                draw.Text(tpStartX, tpStartY, text)
-                tpStartY = tpStartY + tpLineHeight
-
-                -- Show health bar
-                local barWidth = 150
-                local barHeight = 4
+                -- health bar
                 local healthPercent = tele.health / tele.maxHealth
-
-                -- Background
                 draw.Color(50, 50, 50, 255)
-                draw.FilledRect(tpStartX + 10, tpStartY, tpStartX + 10 + barWidth, tpStartY + barHeight)
-
-                -- Health bar
+                draw.FilledRect(cx, cy, cx + barW, cy + healthBarH)
                 draw.Color(color[1], color[2], color[3], 255)
-                draw.FilledRect(tpStartX + 10, tpStartY,
-                    tpStartX + 10 + math.floor(barWidth * healthPercent), tpStartY + barHeight)
+                draw.FilledRect(cx, cy, cx + math.floor(barW * healthPercent), cy + healthBarH)
+                cy = cy + healthBarH + healthBarSpacing
 
-                tpStartY = tpStartY + barHeight + 10
-
-                -- Limit display to 2 teleporters
-                if i >= 2 then
+                if i >= 2 and #foundTeleporters > 2 then
                     draw.Color(200, 200, 200, 255)
-                    draw.Text(tpStartX, tpStartY, "... and " .. (#foundTeleporters - 2) .. " more")
+                    draw.Text(cx, cy, "... and " .. (#foundTeleporters - 2) .. " more")
                     break
                 end
             end
@@ -1066,30 +1148,7 @@ end)
 
 -- Unload callback for cleanup
 callbacks.Register("Unload", function()
-    -- Clean up any active upgrade sequences
-    if isProcessing then
-        ForceCleanup()
-    end
-
-    -- Reset all state variables
-    isProcessing, respawnExpected = false, false
-    upgradeQueue, sequenceEndTime, nextUpgradeTime = {}, 0, 0
-    shouldGuidePlayer, thresholdNotificationShown, hasTriedClassChange = false, false, false
-    needToLeaveZone, leaveZoneStartPos = false, nil
-    lastToggleTime, lastVaccWarning = 0, false
-    waitingForSniperClass, isSniperUpgrade, sniperUpgradeCompleted = false, false, false
-    sniperUpgradeCompletedTime = 0
-    config.autoWalkEnabled = true
-
-    -- Reset teleporter scanner state
-    hasScannedTeleporter, foundTeleporters = false, {}
-    tpPathSelected, tpCurrentPathIndex = false, nil
-    tpCurrentPathWaypointIndex, tpUsingPredefinedPath = 1, false
-    tpLOSDetectedTime = 0
-    teleporterManuallyDisabled = false
-    teleporterConfig.autoWalkEnabled = false
-
+    if isProcessing then ForceCleanup() end
+    ResetState()
     AddNotification("Script unloaded - State cleaned up", "info")
 end)
-
-client.ChatPrintf( "\x05Dear Team, I have an automated sniper script active. We only need ONE teleporter with NO 2-way please." )

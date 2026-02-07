@@ -19,7 +19,8 @@ local UI = {
         error = {255, 80, 80},
         info = {100, 180, 255},
         accent = {199, 170, 255},
-        text = {255, 255, 255}
+        text = {255, 255, 255},
+        textDim = {150, 150, 150}
     }
 }
 
@@ -30,6 +31,7 @@ local timerDuration = 0
 local lastWaveChecked = -1
 local popfileName = ""
 local hasAbandonedMatch = false
+local currentServer = nil
 
 -- Notification System
 local function CreateNotification(message, type)
@@ -98,6 +100,7 @@ local function DrawNotification(notif, x, y)
     local height = math.floor(UI.notificationHeight)
 
     local progress = 1 - ((globals.CurTime() - notif.time) / UI.notificationLifetime)
+    progress = math.max(0, math.min(1, progress))  -- Clamp progress between 0 and 1
     local alpha = math.floor(notif.alpha * progress)
 
     -- Clamp alpha to valid range and check for NaN
@@ -200,9 +203,7 @@ local function checkMvMStatus()
     local objectiveResource = FindObjectiveResource()
     if not objectiveResource then
         -- Only show error occasionally to avoid spam
-        if globals.FrameCount() % 300 == 0 then
             AddNotification("Searching for objective resource...", "warning")
-        end
         return false
     end
 
@@ -240,17 +241,44 @@ local function checkMvMStatus()
     local currentWave = objectiveResource:GetPropInt("m_nMannVsMachineWaveCount")
     local maxWaves = objectiveResource:GetPropInt("m_nMannVsMachineMaxWaveCount")
 
-    -- Debug: Show wave info periodically (every 100 frames to avoid spam)
-    if globals.FrameCount() % 1000 == 0 and currentWave > 0 then
-        AddNotification(string.format("Wave: %d/%d", currentWave, maxWaves), "info")
-    end
-
     -- Check if we're on the last wave
     if currentWave >= maxWaves and currentWave > 0 then
         return true, currentWave, maxWaves
     end
 
     return false, currentWave, maxWaves
+end
+
+-- Function to reset all state variables
+local function ResetState()
+    timerStarted = false
+    timerStartTime = 0
+    timerDuration = 0
+    lastWaveChecked = -1
+    popfileName = ""
+    hasAbandonedMatch = false
+    hasNotifiedMvMEntry = false
+    objectiveResourceCache = nil
+end
+
+-- Function to check for server changes
+local function CheckServerChange()
+    local netChannel = clientstate.GetNetChannel()
+    local serverIP = netChannel and netChannel:GetAddress() or nil
+    local signonState = clientstate.GetClientSignonState()
+
+    -- Check if server changed or disconnected
+    if serverIP ~= currentServer then
+        local oldServer = currentServer
+        currentServer = serverIP
+
+        ResetState()
+
+        -- Only show notification if we're fully connected to a new server
+        if oldServer and serverIP and signonState == E_SignonState.SIGNONSTATE_FULL then
+            AddNotification("Connected to new server - State reset", "info")
+        end
+    end
 end
 
 -- Function to start the timer
@@ -289,6 +317,9 @@ local function onFrameStageNotify(stage)
         return
     end
 
+    -- Check for server changes and reset state if needed
+    CheckServerChange()
+
     -- Check MvM status
     local isLastWave, currentWave, maxWaves = checkMvMStatus()
 
@@ -296,13 +327,7 @@ local function onFrameStageNotify(stage)
     if not gamerules.IsMvM() then
         if timerStarted or popfileName ~= "" then
             -- Reset state when leaving MvM
-            timerStarted = false
-            timerStartTime = 0
-            lastWaveChecked = -1
-            popfileName = ""
-            hasAbandonedMatch = false
-            hasNotifiedMvMEntry = false
-            objectiveResourceCache = nil
+            ResetState()
             AddNotification("Left MvM Mode", "info")
         end
         return
@@ -336,7 +361,7 @@ local function onDraw()
     -- Get screen dimensions
     local screenWidth, screenHeight = draw.GetScreenSize()
     local startX = math.floor(screenWidth*0.01)
-    local startY = 400
+    local startY = math.floor(screenHeight*0.25)
 
     -- Update and draw notifications
     for i = #UI.notifications, 1, -1 do
@@ -371,29 +396,79 @@ local function onDraw()
         remainingTime = 0
     end
 
-    -- Create timer display font
-    local timerFont = draw.CreateFont("Arial", 16, 700)
-    draw.SetFont(timerFont)
+    -- Timer panel UI
+    local paddingX, paddingY = 10, 5
+    draw.SetFont(UI.mainFont)
 
-    -- Draw timer display at bottom left
     local minutes = math.floor(remainingTime / 60)
     local seconds = math.floor(remainingTime % 60)
-    local timeText = string.format("Auto-Abandon Timer: %02d:%02d", minutes, seconds)
 
-    -- Draw with shadow for visibility
-    draw.Color(0, 0, 0, 255)
-    draw.Text(11, screenHeight - 61, timeText)
+    local timerLabel = "Timer: "
+    local timerValue = string.format("%02d:%02d", minutes, seconds)
+    local missionLabel = "Mission: "
+    local missionValue = popfileName
 
-    draw.Color(255, 50, 50, 255)
-    draw.Text(10, screenHeight - 62, timeText)
+    local timerLabelW, textHeight = draw.GetTextSize(timerLabel)
+    local timerValueW, _ = draw.GetTextSize(timerValue)
+    local missionLabelW, _ = draw.GetTextSize(missionLabel)
+    local missionValueW, _ = draw.GetTextSize(missionValue)
 
-    -- Draw popfile name
-    draw.Color(0, 0, 0, 255)
-    draw.Text(11, screenHeight - 36, "Mission: " .. popfileName)
+    local line1Width = timerLabelW + timerValueW
+    local line2Width = missionLabelW + missionValueW
+    local maxWidth = math.max(line1Width, line2Width)
 
-    draw.Color(255, 255, 255, 255)
-    draw.Text(10, screenHeight - 37, "Mission: " .. popfileName)
+    local panelWidth = maxWidth + (paddingX * 2)
+    local panelHeight = (textHeight * 2) + (paddingY * 3)
+
+    local panelX = math.floor(screenWidth * 0.01)
+    local panelY = (screenHeight - panelHeight - 10)*0.5
+
+    -- Background
+    draw.Color(0, 0, 0, 178)
+    draw.FilledRect(panelX, panelY, panelX + panelWidth, panelY + panelHeight)
+
+    -- Accent bar
+    draw.Color(199, 170, 255, 255)
+    draw.FilledRect(panelX, panelY, panelX + panelWidth, panelY + 2)
+
+    -- Timer label (dim)
+    local textY1 = panelY + paddingY + 2
+    draw.Color(UI.colors.textDim[1], UI.colors.textDim[2], UI.colors.textDim[3], 255)
+    draw.Text(panelX + paddingX, textY1, timerLabel)
+
+    -- Timer value (color based on urgency)
+    if remainingTime <= 30 then
+        draw.Color(UI.colors.error[1], UI.colors.error[2], UI.colors.error[3], 255)
+    else
+        draw.Color(UI.colors.warning[1], UI.colors.warning[2], UI.colors.warning[3], 255)
+    end
+    draw.Text(panelX + paddingX + timerLabelW, textY1, timerValue)
+
+    -- Mission label (dim)
+    local textY2 = textY1 + textHeight + paddingY
+    draw.Color(UI.colors.textDim[1], UI.colors.textDim[2], UI.colors.textDim[3], 255)
+    draw.Text(panelX + paddingX, textY2, missionLabel)
+
+    -- Mission value (white)
+    draw.Color(UI.colors.text[1], UI.colors.text[2], UI.colors.text[3], 255)
+    draw.Text(panelX + paddingX + missionLabelW, textY2, missionValue)
 end
+
+-- MvM wave user message handler
+callbacks.Register("DispatchUserMessage", "mvmAutoAbandon_UserMsg", function(msg)
+    local msgID = msg:GetID()
+
+    if msgID == MVMWaveChange then
+        local objectiveResource = FindObjectiveResource()
+        if objectiveResource then
+            local currentWave = objectiveResource:GetPropInt("m_nMannVsMachineWaveCount")
+            local maxWaves = objectiveResource:GetPropInt("m_nMannVsMachineMaxWaveCount")
+            AddNotification(string.format("Wave Changed: %d/%d", currentWave, maxWaves), "info")
+        end
+    elseif msgID == MVMWaveFailed then
+        AddNotification("Wave Failed!", "error")
+    end
+end)
 
 -- Register callbacks
 callbacks.Register("FrameStageNotify", "mvmAutoAbandon_FSN", onFrameStageNotify)
