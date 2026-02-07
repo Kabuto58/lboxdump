@@ -401,6 +401,9 @@ local function ResetState()
     tpLOSDetectedTime = 0
     teleporterManuallyDisabled = false
     teleporterConfig.autoWalkEnabled = false
+
+    -- Turn off MVM Auto Ready for time to upgrade
+    gui.SetValue("mvm auto ready (f4)", 0)
 end
 
 local function CheckServerChange()
@@ -412,13 +415,8 @@ local function CheckServerChange()
     if serverIP ~= currentServer then
         local oldServer = currentServer
         currentServer = serverIP
-
         ResetState()
         hasResetForEndOfMatch = false
-
-        -- Disable MvM auto ready when joining a new server
-        gui.SetValue("mvm auto ready (f4)", 0)
-
         -- Only show notification if we're fully connected to a new server
         if oldServer and serverIP and signonState == E_SignonState.SIGNONSTATE_FULL then
             AddNotification("Connected to new server - Reset state", "info")
@@ -931,7 +929,7 @@ callbacks.Register("CreateMove", function(cmd)
                 local nearestTele = foundTeleporters[1]
                 local currentDistance = GetDistanceTP(me:GetAbsOrigin(), nearestTele.pos)
 
-                if currentDistance > 50 then  -- Reduced from 100 to 50 - disable when touching teleporter
+                if currentDistance > 100 then  -- Reduced from 100 to 50 - disable when touching teleporter
                     WalkToTeleporterTP(cmd, me, nearestTele.pos)
                 else
                     teleporterConfig.autoWalkEnabled = false
