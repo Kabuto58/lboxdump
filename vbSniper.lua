@@ -416,6 +416,9 @@ local function CheckServerChange()
         ResetState()
         hasResetForEndOfMatch = false
 
+        -- Disable MvM auto ready when joining a new server
+        gui.SetValue("mvm auto ready (f4)", 0)
+
         -- Only show notification if we're fully connected to a new server
         if oldServer and serverIP and signonState == E_SignonState.SIGNONSTATE_FULL then
             AddNotification("Connected to new server - Reset state", "info")
