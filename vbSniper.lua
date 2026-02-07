@@ -583,7 +583,6 @@ local function TriggerProcess()
     end
 
     lastProcessTime, isProcessing = currentTime, true
-    gui.SetValue("mvm auto ready (f4)", 0)
     AddNotification("Starting sequence...", "success")
     
     
