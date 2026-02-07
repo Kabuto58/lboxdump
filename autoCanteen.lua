@@ -67,11 +67,11 @@ local function DrawNotification(notif, x, y)
     draw.FilledRect(x, y, x + width, y + height)
 
     -- Icon with color
-    draw.Color(clampColor(notif.color[1]), clampColor(notif.color[2]), clampColor(notif.color[3]), alpha)
+    draw.Color(clampColor(notif.color[1]), clampColor(notif.color[2]), clampColor(notif.color[3]), clampColor(alpha))
     draw.Text(math.floor(x + 5), math.floor(y + height / 2 - 7), notif.icon)
 
     -- Message text
-    draw.Color(clampColor(UI.colors.text[1]), clampColor(UI.colors.text[2]), clampColor(UI.colors.text[3]), alpha)
+    draw.Color(clampColor(UI.colors.text[1]), clampColor(UI.colors.text[2]), clampColor(UI.colors.text[3]), clampColor(alpha))
     draw.Text(math.floor(x + iconWidth + 15), math.floor(y + height / 2 - 7), notif.message)
 
     -- Progress bar
@@ -80,7 +80,7 @@ local function DrawNotification(notif, x, y)
         if barAlpha < 0 then barAlpha = 0 end
         if barAlpha > 255 then barAlpha = 255 end
 
-        draw.Color(199, 170, 255, barAlpha)
+        draw.Color(199, 170, 255, clampColor(barAlpha))
         draw.FilledRect(
             math.floor(x + 1),
             math.floor(y + height - 2),
