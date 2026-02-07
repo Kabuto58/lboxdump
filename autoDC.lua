@@ -421,7 +421,7 @@ local function onDraw()
     local panelHeight = (textHeight * 2) + (paddingY * 3)
 
     local panelX = math.floor(screenWidth * 0.01)
-    local panelY = (screenHeight - panelHeight - 10)*0.5
+    local panelY = math.floor((screenHeight - panelHeight - 10) * 0.5)
 
     -- Background
     draw.Color(0, 0, 0, 178)
