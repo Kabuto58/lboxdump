@@ -994,7 +994,7 @@ callbacks.Register("Draw", function()
                 -- Progress bar
                 if progress > 0 then
                     local barAlpha = clampColor(alpha * 0.7)
-                    draw.Color(199, 170, 255, barAlpha)
+                    draw.Color(clampColor(199), clampColor(170), clampColor(255), clampColor(barAlpha))
                     draw.FilledRect(
                         math.floor(startX + 1),
                         math.floor(yOffset + height - 2),
@@ -1070,7 +1070,7 @@ callbacks.Register("Draw", function()
         draw.FilledRect(tpX, tpY, tpX + panelW, tpY + panelH)
 
         -- top bar
-        draw.Color(199, 170, 255, 255)
+        draw.Color(clampColor(199), clampColor(170), clampColor(255), 255)
         draw.FilledRect(tpX, tpY, tpX + panelW, tpY + 2)
 
         -- content
@@ -1078,7 +1078,7 @@ callbacks.Register("Draw", function()
         local cy = tpY + 2 + paddingY
 
         -- header text
-        draw.Color(UI.colors.text[1], UI.colors.text[2], UI.colors.text[3], 255)
+        draw.Color(clampColor(UI.colors.text[1]), clampColor(UI.colors.text[2]), clampColor(UI.colors.text[3]), 255)
         draw.Text(cx, cy, headerText)
         cy = cy + lineH
 
@@ -1087,7 +1087,7 @@ callbacks.Register("Draw", function()
         draw.Text(cx, cy, awLabel)
         if teleporterConfig.autoWalkEnabled then
             local labelW = draw.GetTextSize(awLabel)
-            draw.Color(UI.colors.success[1], UI.colors.success[2], UI.colors.success[3], 255)
+            draw.Color(clampColor(UI.colors.success[1]), clampColor(UI.colors.success[2]), clampColor(UI.colors.success[3]), 255)
             draw.Text(cx + labelW, cy, awStatus)
         end
         cy = cy + lineH + paddingY
@@ -1102,20 +1102,20 @@ callbacks.Register("Draw", function()
                 local tele = foundTeleporters[i]
                 local color = tele.isEnemy and UI.colors.enemy or UI.colors.friendly
 
-                draw.Color(color[1], color[2], color[3], 200)
+                draw.Color(clampColor(color[1]), clampColor(color[2]), clampColor(color[3]), 200)
                 draw.Text(cx, cy, teleTexts[i])
                 cy = cy + lineH
 
                 -- health bar
                 local healthPercent = tele.health / tele.maxHealth
-                draw.Color(50, 50, 50, 255)
+                draw.Color(clampColor(50), clampColor(50), clampColor(50), 255)
                 draw.FilledRect(cx, cy, cx + barW, cy + healthBarH)
-                draw.Color(color[1], color[2], color[3], 255)
+                draw.Color(clampColor(color[1]), clampColor(color[2]), clampColor(color[3]), 255)
                 draw.FilledRect(cx, cy, cx + math.floor(barW * healthPercent), cy + healthBarH)
                 cy = cy + healthBarH + healthBarSpacing
 
                 if i >= 2 and #foundTeleporters > 2 then
-                    draw.Color(200, 200, 200, 255)
+                    draw.Color(clampColor(200), clampColor(200), clampColor(200), 255)
                     draw.Text(cx, cy, "... and " .. (#foundTeleporters - 2) .. " more")
                     break
                 end
