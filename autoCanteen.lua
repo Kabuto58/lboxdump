@@ -181,6 +181,9 @@ callbacks.Register("CreateMove", "AutoCanteen", function(cmd)
         shouldUseCanteen = currentAmmo <= 3
     else
         local maxAmmo = maxAmmoTracker[weaponID]
+        if maxAmmo < currentAmmo then
+            maxAmmo = currentAmmo
+        end
         if maxAmmo and maxAmmo > 0 then
             local ammoPercent = currentAmmo / maxAmmo
             shouldUseCanteen = ammoPercent <= config.ammoThreshold

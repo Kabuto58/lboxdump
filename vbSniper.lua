@@ -6,9 +6,9 @@ local config = {
 -- UI Configuration
 local UI = {
     notifications = {},
-    maxNotifications = 3,
+    maxNotifications = 5,
     notificationHeight = 20,
-    notificationLifetime = 10,
+    notificationLifetime = 15,
     mainFont = nil,
     colors = {
         success = {100, 255, 100}, warning = {255, 200, 50},
@@ -33,7 +33,7 @@ local sniperUpgradeCompletedTime = 0  -- Timestamp when Sniper upgrades finished
 local hasResetForEndOfMatch = false
 
 local COOLDOWN_TIME = 0.5
-local UPGRADE_DELAY, SEQUENCE_END_COOLDOWN = 0.1, 1.0
+local UPGRADE_DELAY, SEQUENCE_END_COOLDOWN = 0, 1.0
 local SNIPER_UPGRADE_DELAY = 0.2
 local TOGGLE_COOLDOWN = 0.2
 local TELEPORTER_AUTOWALK_DELAY = 2.0  -- Delay before enabling teleporter auto-walk
@@ -140,7 +140,7 @@ local function ChangeClass()
         hasTriedClassChange = true
         waitingForSniperClass = true
         -- Send joinclass command directly
-        client.Command("wait 300;joinclass sniper", true)
+        client.Command("wait 200;joinclass sniper", true)
         AddNotification("Changing class to Sniper...", "success")
     else
         AddNotification("Already tried class change, skipping", "warning")
@@ -404,6 +404,7 @@ local function ResetState()
 
     -- Turn off MVM Auto Ready for time to upgrade
     gui.SetValue("mvm auto ready (f4)", 0)
+    AddNotification("Temporarily Disabled Auto-Ready", "success")
 end
 
 local function CheckServerChange()
@@ -590,19 +591,10 @@ local function TriggerProcess()
     upgradeQueue = {
         {type = "begin"},
         {type = "upgrade", slot = 1, id = 19, count = 10},
-        {type = "upgrade", slot = 1, id = 19, count = 10},
-        {type = "end", count = 20},
-        {type = "begin"},
         {type = "upgrade", slot = 1, id = 19, count = -10},
-        {type = "upgrade", slot = 1, id = 19, count = -10},
-        {type = "end", count = -20},
-        {type = "begin"},
         {type = "upgrade", slot = 1, id = 19, count = 10},
-        {type = "upgrade", slot = 1, id = 19, count = 10},
-        {type = "end", count = 20},
-        {type = "begin"},
         {type = "respec"},
-        {type = "end", count = 0}
+        {type = "end", count = 10}
     }
 
     nextUpgradeTime = currentTime + UPGRADE_DELAY
@@ -665,7 +657,6 @@ local function TriggerSniperUpgrades()
         {type = "upgrade", slot = 0, id = 17.1, count = 10},
         {type = "upgrade", slot = 0, id = 17.2, count = 10},
         {type = "upgrade", slot = 0, id = 17.3, count = 10},
-        -- Slot 9 upgrades
         {type = "upgrade", slot = 9, id = 29.0, count = 10},
         {type = "upgrade", slot = 9, id = 29.1, count = 10},
         {type = "upgrade", slot = 9, id = 29.2, count = 10},
@@ -877,7 +868,7 @@ callbacks.Register("CreateMove", function(cmd)
         end
     end
 
-    -- ===== TELEPORTER AUTO-WALK (after Sniper upgrades) =====
+    -- Teleporter auto-walk
     if sniperUpgradeCompleted then
         local playerClass = me:GetPropInt("m_iClass")
         local isSniper = playerClass == TF_CLASS_SNIPER
@@ -929,12 +920,13 @@ callbacks.Register("CreateMove", function(cmd)
                 local nearestTele = foundTeleporters[1]
                 local currentDistance = GetDistanceTP(me:GetAbsOrigin(), nearestTele.pos)
 
-                if currentDistance > 100 then
+                if currentDistance > 100 then  -- Reduced from 100 to 50 - disable when touching teleporter
                     WalkToTeleporterTP(cmd, me, nearestTele.pos)
                 else
                     teleporterConfig.autoWalkEnabled = false
                     sniperUpgradeCompletedTime = 0  -- Reset to prevent delay check from re-enabling
                     gui.SetValue("mvm auto ready (f4)", 1)
+                    AddNotification("Enabled Auto-Ready", "success")
                     AddNotification("Touched teleporter - Auto-walk OFF", "success")
                 end
             end
@@ -1006,7 +998,7 @@ callbacks.Register("Draw", function()
         end
     end
 
-    -- ===== TELEPORTER SCANNER DISPLAY (after Sniper upgrades) =====
+    -- Teleporter ESP UI
     if sniperUpgradeCompleted then
         -- Scan once on first execution
         if teleporterConfig.scanEnabled and not hasScannedTeleporter then
@@ -1015,8 +1007,8 @@ callbacks.Register("Draw", function()
         end
 
         local paddingX, paddingY = 10, 5
-        local tpX = math.floor(screenWidth * 0.02)
-        local tpY = 100
+        local tpX = math.floor(screenWidth * 0.01)
+        local tpY = math.floor(screenHeight * 0.25)
         local lineH = 18
         local healthBarH = 4
         local healthBarSpacing = 6
@@ -1152,4 +1144,3 @@ callbacks.Register("Unload", function()
     ResetState()
     AddNotification("Script unloaded - State cleaned up", "info")
 end)
-

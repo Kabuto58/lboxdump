@@ -361,7 +361,7 @@ local function onDraw()
     -- Get screen dimensions
     local screenWidth, screenHeight = draw.GetScreenSize()
     local startX = math.floor(screenWidth*0.01)
-    local startY = math.floor(screenHeight*0.25)
+    local startY = math.floor(screenHeight*0.4)
 
     -- Update and draw notifications
     for i = #UI.notifications, 1, -1 do
@@ -421,7 +421,7 @@ local function onDraw()
     local panelHeight = (textHeight * 2) + (paddingY * 3)
 
     local panelX = math.floor(screenWidth * 0.01)
-    local panelY = math.floor((screenHeight - panelHeight - 10) * 0.5)
+    local panelY = math.floor(screenHeight * 0.8)
 
     -- Background
     draw.Color(0, 0, 0, 178)
