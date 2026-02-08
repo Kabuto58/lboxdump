@@ -929,7 +929,7 @@ callbacks.Register("CreateMove", function(cmd)
                 local nearestTele = foundTeleporters[1]
                 local currentDistance = GetDistanceTP(me:GetAbsOrigin(), nearestTele.pos)
 
-                if currentDistance > 100 then  -- Reduced from 100 to 50 - disable when touching teleporter
+                if currentDistance > 100 then
                     WalkToTeleporterTP(cmd, me, nearestTele.pos)
                 else
                     teleporterConfig.autoWalkEnabled = false
@@ -1152,3 +1152,4 @@ callbacks.Register("Unload", function()
     ResetState()
     AddNotification("Script unloaded - State cleaned up", "info")
 end)
+
