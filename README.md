@@ -1,5 +1,8 @@
 ### First production release of my scripts.
 
+## A. PullLatestReleaseLUA.sh
+- This Bash executable should be placed in your LUA folder. Running this script fetches the latest release scripts from this repository. If scripts with the same name already exists within the LUA folder, please take note it will overwrite and replace it.
+
 ## 1. vbSniper
 - This script builds from skeleton code [Vaccibucks](https://github.com/Spark-Init/LBOX-Adventure/tree/d8bbadf04e8ef9e2aac560cf87fc9493a57fc0fd/VacciBucks) to function as a more automated process for Sniper aimbots in MvM maps during the setup phase.
 - Upon detection of joining a new server or leaving a server, script local state variables are reset. MvM auto-ready is disabled. Client will have to manually select Medic, this is to give the option of joining other classes throughout the game.
