@@ -1,4 +1,4 @@
-### For a stable user experience, only download the latest release files from the release page.
+**For a stable user experience, only download the latest release files from the release page.**
 
 ## A. PullLatestReleaseLUA.sh
 - This Bash executable should be placed in your LUA folder. Running this script fetches the latest release scripts from this repository. If scripts with the same name already exists within the LUA folder, please take note it will overwrite and replace it.
